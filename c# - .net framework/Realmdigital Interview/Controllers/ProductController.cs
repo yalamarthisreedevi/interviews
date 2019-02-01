@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,10 +9,11 @@ using Newtonsoft.Json;
 
 namespace Realmdigital_Interview.Controllers
 {
-    public class ProductController
+    [RoutePrefix("api")]
+    public class ProductController : ApiController
     {
 
-        [Route("product")]
+        [Route("product/{productId}")]
         public object GetProductById(string productId)
         {
             string response = "";
@@ -22,34 +23,41 @@ namespace Realmdigital_Interview.Controllers
                 client.Headers[HttpRequestHeader.ContentType] = "application/json";
                 response = client.UploadString("http://192.168.0.241/eanlist?type=Web", "POST", "{ \"id\": \"" + productId + "\" }");
             }
-            var reponseObject = JsonConvert.DeserializeObject<List<ApiResponseProduct>>(response);
+            var apiResponseProductList = JsonConvert.DeserializeObject<List<ApiResponseProduct>>(response);
 
-            var result = new List<object>();
-            for (int i = 0; i < reponseObject.Count; i++)
-            {
-                var prices = new List<object>();
-                for (int j = 0; j < reponseObject[i].PriceRecords.Count; j++)
+            var apiResponseProduct = apiResponseProductList.FirstOrDefault(r => r.BarCode == productId);//Assumed Barcode as productId, otherwise just do FirstOrDefault()
+
+            if (apiResponseProduct != null)
+                return new
                 {
-                    if (reponseObject[i].PriceRecords[j].CurrencyCode == "ZAR")
-                    {
-                        prices.Add(new
-                        {
-                            Price = reponseObject[i].PriceRecords[j].SellingPrice,
-                            Currency = reponseObject[i].PriceRecords[j].CurrencyCode
-                        });
-                    }
-                }
-                result.Add(new
-                {
-                    Id = reponseObject[i].BarCode,
-                    Name = reponseObject[i].ItemName,
-                    Prices = prices
-                });
-            }
-            return result.Count > 0 ? result[0] : null;
+                    Id = apiResponseProduct.BarCode,
+                    Name = apiResponseProduct.ItemName,
+                    Prices = GetPrices(apiResponseProduct.PriceRecords)
+                };
+            else
+                return new object();
         }
 
-        [Route("product/search")]
+        private List<object> GetPrices(List<ApiResponsePrice> priceRecords)
+        {
+            var prices = new List<object>();
+
+            priceRecords.ForEach(prc =>
+            {
+                if (prc.CurrencyCode == "ZAR")
+                {
+                    prices.Add(new
+                    {
+                        Price = prc.SellingPrice,
+                        Currency = prc.CurrencyCode
+                    });
+                }
+            });
+
+            return prices;
+        }
+
+        [Route("product/search/{productName}")]
         public List<object> GetProductsByName(string productName)
         {
             string response = "";
@@ -59,30 +67,21 @@ namespace Realmdigital_Interview.Controllers
                 client.Headers[HttpRequestHeader.ContentType] = "application/json";
                 response = client.UploadString("http://192.168.0.241/eanlist?type=Web", "POST", "{ \"names\": \"" + productName + "\" }");
             }
-            var reponseObject = JsonConvert.DeserializeObject<List<ApiResponseProduct>>(response);
 
+            var apiResponseProductList = JsonConvert.DeserializeObject<List<ApiResponseProduct>>(response);
+            
             var result = new List<object>();
-            for (int i = 0; i < reponseObject.Count; i++)
-            {
-                var prices = new List<object>();
-                for (int j = 0; j < reponseObject[i].PriceRecords.Count; j++)
-                {
-                    if (reponseObject[i].PriceRecords[j].CurrencyCode == "ZAR")
-                    {
-                        prices.Add(new
-                        {
-                            Price = reponseObject[i].PriceRecords[j].SellingPrice,
-                            Currency = reponseObject[i].PriceRecords[j].CurrencyCode
-                        });
-                    }
-                }
+
+            apiResponseProductList.ForEach(apiResponseProduct =>
+            {                
                 result.Add(new
                 {
-                    Id = reponseObject[i].BarCode,
-                    Name = reponseObject[i].ItemName,
-                    Prices = prices
+                    Id = apiResponseProduct.BarCode,
+                    Name = apiResponseProduct.ItemName,
+                    Prices = GetPrices(apiResponseProduct.PriceRecords)
                 });
-            }
+            });
+
             return result;
         }
     }
